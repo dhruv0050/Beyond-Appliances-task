@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Video, Upload, Loader } from 'lucide-react';
+import { ArrowRight, Video, Upload, Loader, BarChart3 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -96,6 +96,14 @@ const Landing = () => {
             <h1 className="text-3xl font-bold text-gray-900">Call Analytics</h1>
             <p className="text-sm text-gray-600 mt-2">Submit Google Drive video links to analyze sales calls.</p>
           </div>
+          
+          <Link 
+            to="/analytics" 
+            className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition shadow-sm"
+          >
+            <BarChart3 className="w-5 h-5" />
+            View Analytics Dashboard
+          </Link>
         </div>
 
         {loading && (
