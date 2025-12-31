@@ -9,6 +9,7 @@ import uvicorn
 
 from gemini_service import analyze_video_with_gemini
 from drive_downloader import download_from_drive
+from csv_analysis_service import load_call_reports, get_call_report_by_id, get_call_stats
 
 
 app = FastAPI(title="Duroflex Video Analysis API")
@@ -207,6 +208,52 @@ async def delete_result(video_id: str):
         "status": "success",
         "message": f"Results for video {video_id} deleted successfully"
     }
+
+
+# ===== CSV CALL ANALYSIS ENDPOINTS =====
+
+@app.get("/api/call-reports")
+async def get_all_call_reports():
+    """Get all call analysis reports from CSV"""
+    try:
+        reports = load_call_reports()
+        return {
+            "status": "success",
+            "total": len(reports),
+            "reports": reports
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/call-reports/{call_id}")
+async def get_call_report(call_id: str):
+    """Get a specific call report by call ID"""
+    try:
+        report = get_call_report_by_id(call_id)
+        if not report:
+            raise HTTPException(status_code=404, detail=f"Call report not found for ID {call_id}")
+        return {
+            "status": "success",
+            "report": report
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/call-reports/stats/overview")
+async def get_call_reports_stats():
+    """Get aggregate statistics for all call reports"""
+    try:
+        stats = get_call_stats()
+        return {
+            "status": "success",
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
