@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowRight, Video, Upload, Loader, BarChart3, FileText } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, Video, Upload, Loader, BarChart3, FileText, LogOut } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -19,6 +19,7 @@ const IntentBadge = ({ intent }) => {
 };
 
 const Landing = () => {
+  const navigate = useNavigate();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,6 +28,12 @@ const Landing = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState('');
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('admin_email');
+    navigate('/');
+  };
 
   const fetchResults = async () => {
     try {
@@ -93,25 +100,32 @@ const Landing = () => {
         <div className="flex items-center justify-between mb-8">
           <div>
             <p className="text-sm text-blue-700 font-semibold">Duroflex</p>
-            <h1 className="text-3xl font-bold text-gray-900">Call Analytics</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Video Call Analysis</h1>
             <p className="text-sm text-gray-600 mt-2">Submit Google Drive video links to analyze sales calls.</p>
           </div>
           
           <div className="flex gap-3">
             <Link 
-              to="/call-reports" 
-              className="inline-flex items-center gap-2 px-6 py-3 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 transition shadow-sm"
+              to="/dashboard" 
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition shadow-sm"
             >
-              <FileText className="w-5 h-5" />
-              Call Reports
+              <ArrowRight className="w-5 h-5" />
+              Back to Dashboard
             </Link>
             <Link 
-              to="/analytics" 
+              to="/video-analysis/analytics" 
               className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition shadow-sm"
             >
               <BarChart3 className="w-5 h-5" />
               Analytics Dashboard
             </Link>
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition shadow-sm"
+            >
+              <LogOut className="w-5 h-5" />
+              Logout
+            </button>
           </div>
         </div>
 
@@ -234,7 +248,7 @@ const Landing = () => {
 
                 <div className="flex justify-end">
                   <Link
-                    to={`/report/${item.video_id}`}
+                    to={`/video-analysis/report/${item.video_id}`}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition"
                   >
                     View Report

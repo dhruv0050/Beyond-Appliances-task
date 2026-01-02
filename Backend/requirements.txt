@@ -4,3 +4,8 @@ google-generativeai
 python-dotenv
 gdown
 pydantic
+pymongo
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==3.2.2
+pandas

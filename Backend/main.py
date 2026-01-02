@@ -6,10 +6,12 @@ import os
 import json
 from pathlib import Path
 import uvicorn
+from datetime import timedelta
 
 from gemini_service import analyze_video_with_gemini
 from drive_downloader import download_from_drive
 from csv_analysis_service import load_call_reports, get_call_report_by_id, get_call_stats
+from auth_service import authenticate_admin, create_access_token, create_admin_in_db
 
 
 app = FastAPI(title="Duroflex Video Analysis API")
@@ -40,6 +42,50 @@ class BatchAnalysisRequest(BaseModel):
     videos: List[DriveURLRequest]
 
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    email: str
+
+
+# ===== STARTUP EVENT =====
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize admin user in MongoDB on startup"""
+    print("🚀 Starting application...")
+    create_admin_in_db()
+
+
+# ===== AUTHENTICATION ENDPOINTS =====
+
+@app.post("/api/auth/login", response_model=TokenResponse)
+async def login(request: LoginRequest):
+    """
+    Admin login endpoint
+    Credentials: admin@duroflex.com / duroflex123
+    """
+    if not authenticate_admin(request.email, request.password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Create access token
+    access_token = create_access_token(
+        data={"sub": request.email},
+        expires_delta=timedelta(days=1)
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "email": request.email
+    }
+
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -47,11 +93,13 @@ async def root():
         "message": "Duroflex Video Analysis API",
         "status": "running",
         "endpoints": {
+            "login": "POST /api/auth/login",
             "analyze_drive_url": "POST /api/analyze/drive-url",
             "analyze_batch": "POST /api/analyze/batch",
             "get_result": "GET /api/results/{video_id}",
             "get_all_results": "GET /api/results",
-            "health": "GET /api/health"
+            "health": "GET /api/health",
+            "call_reports": "GET /api/call-reports"
         }
     }
 
