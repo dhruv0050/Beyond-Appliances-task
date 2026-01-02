@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, Download, FileDown } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -26,6 +26,140 @@ const CallReportDetail = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const downloadCSV = () => {
+    if (!report) return;
+
+    const analysis = report.analysis || {};
+    const functional = analysis.Functional || {};
+    const customer = analysis.Customer_Information || {};
+    const agent = analysis.Agent_Areas || {};
+    const summary = analysis.Overall_Summary || {};
+    const relax = agent.RELAX_Framework || {};
+    const softSkills = agent.SoftSkills_Etiquette || {};
+    const knowledge = agent.Verbal_Product_Knowledge || {};
+    const invitation = agent.The_Invitation_to_Visit || {};
+
+    // Create CSV headers
+    const headers = [
+      'Call_ID', 'Store_Name', 'City', 'State', 'Region', 'Date', 'Duration_Seconds',
+      'Customer_Name', 'Agent_Name', 'Is_Converted',
+      'Call_Objective', 'Interest_Category', 'Specific_Product',
+      'Intent_to_Visit', 'Intent_to_Purchase', 'Customer_Stage_AIDA',
+      'Customer_Satisfaction_Score', 'Barriers_to_Conversion',
+      'R_Reach_Out_Rating', 'E_Explore_Needs_Rating', 'L_Link_Experience_Rating',
+      'A_Add_Value_Rating', 'X_Express_Closing_Rating',
+      'Product_Description_Quality', 'Stock_Availability_Check',
+      'Invitation_Attempted', 'Invitation_Quality',
+      'Tone_and_Patience', 'Hold_Management', 'Language_Fluency',
+      'Call_Synopsis', 'Agent_Performance', 'Next_Action'
+    ];
+
+    // Create CSV row
+    const row = [
+      report.call_id,
+      report.store_name,
+      report.city,
+      report.state,
+      report.region,
+      report.call_date,
+      report.duration_seconds,
+      functional.Customer_Name || '',
+      functional.Agent_Name || '',
+      report.is_converted ? 'Yes' : 'No',
+      functional.Call_Objective_Theme || '',
+      customer.Interest_Category || '',
+      customer.Specific_Product_Inquiry || '',
+      customer.Intent_to_Visit_Rating || '',
+      customer.Intent_to_Purchase_Rating || '',
+      customer.Customer_Stage_AIDA || '',
+      customer.Customer_Satisfaction_Score || '',
+      customer.Barriers_to_Conversion || '',
+      relax.R_Reach_Out?.Rating || '',
+      relax.E_Explore_Needs?.Rating || relax.E_Explore?.Rating || '',
+      relax.L_Link_Experience?.Rating || '',
+      relax.A_Add_Value?.Rating || '',
+      relax.X_Express_Closing?.Rating || '',
+      knowledge.Description_Quality_Rating || '',
+      knowledge.Stock_Availability_Check_Rating || '',
+      invitation.Attempted ? 'Yes' : 'No',
+      invitation.Quality_Rating || '',
+      softSkills.Tone_and_Patience_Rating || '',
+      softSkills.Hold_Management_Rating || '',
+      softSkills.Agent_Language_Fluency_Score || '',
+      (summary.Call_Synopsis || '').replace(/,/g, ';').replace(/\n/g, ' '),
+      (summary.Agent_Performance_Summary || '').replace(/,/g, ';').replace(/\n/g, ' '),
+      summary.Next_Action || ''
+    ];
+
+    // Escape fields that contain commas or quotes
+    const escapeCSVField = (field) => {
+      const str = String(field);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const csvContent = [
+      headers.join(','),
+      row.map(escapeCSVField).join(',')
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `call_report_${report.call_id}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const downloadTranscript = () => {
+    if (!report) return;
+
+    const analysis = report.analysis || {};
+    const transcript = analysis.Transcript_Log || [];
+    const functional = analysis.Functional || {};
+
+    if (transcript.length === 0) {
+      alert('No transcript available for this call');
+      return;
+    }
+
+    // Create transcript text content
+    let textContent = `CALL TRANSCRIPT\n`;
+    textContent += `${'='.repeat(80)}\n\n`;
+    textContent += `Call ID: ${report.call_id}\n`;
+    textContent += `Store: ${report.store_name}\n`;
+    textContent += `Date: ${report.call_date}\n`;
+    textContent += `Duration: ${Math.floor(report.duration_seconds / 60)}:${(report.duration_seconds % 60).toString().padStart(2, '0')}\n`;
+    textContent += `Customer: ${functional.Customer_Name || 'Unknown'}\n`;
+    textContent += `Agent: ${functional.Agent_Name || 'Unknown'}\n`;
+    textContent += `Location: ${report.city}, ${report.state}\n\n`;
+    textContent += `${'='.repeat(80)}\n\n`;
+
+    // Add transcript entries
+    transcript.forEach((entry, index) => {
+      const timestamp = entry.Timestamp || `${index + 1}`;
+      const speaker = entry.Speaker || 'Unknown';
+      const text = entry.Text || '';
+
+      textContent += `[${timestamp}] ${speaker}:\n`;
+      textContent += `${text}\n\n`;
+    });
+
+    textContent += `${'='.repeat(80)}\n`;
+    textContent += `End of Transcript\n`;
+
+    // Create blob and download
+    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `call_transcript_${report.call_id}.txt`;
+    link.click();
+    URL.revokeObjectURL(link.href);
   };
 
   if (loading) {
@@ -121,10 +255,31 @@ const CallReportDetail = () => {
       }}></div>
 
       <div className="max-w-[1400px] mx-auto px-6 py-10 relative z-10">
-        {/* Back Button */}
-        <Link to="/call-reports" className="inline-flex items-center gap-2 text-amber-400 hover:text-amber-300 mb-6 transition">
-          <ArrowLeft className="w-4 h-4" /> Back to All Reports
-        </Link>
+        {/* Back Button and Download Buttons */}
+        <div className="flex items-center justify-between mb-6">
+          <Link to="/call-reports" className="inline-flex items-center gap-2 text-amber-400 hover:text-amber-300 transition">
+            <ArrowLeft className="w-4 h-4" /> Back to All Reports
+          </Link>
+          
+          <div className="flex gap-3">
+            <button
+              onClick={downloadCSV}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition shadow-sm"
+              title="Download Call Report as CSV"
+            >
+              <Download className="w-4 h-4" />
+              Download CSV
+            </button>
+            <button
+              onClick={downloadTranscript}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-semibold transition shadow-sm"
+              title="Download Call Transcript as TXT"
+            >
+              <FileDown className="w-4 h-4" />
+              Download Transcript
+            </button>
+          </div>
+        </div>
 
         {/* HEADER */}
         <header className="bg-gradient-to-br from-[#0f0f14] to-[#16161d] border border-white/6 rounded-3xl p-8 mb-8 relative overflow-hidden">
