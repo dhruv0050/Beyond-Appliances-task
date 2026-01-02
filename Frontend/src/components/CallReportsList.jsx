@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Phone, MapPin, Calendar, Clock, LogOut } from 'lucide-react';
+import { ArrowLeft, Phone, MapPin, Calendar, Clock, LogOut, BarChart3 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -84,14 +84,24 @@ const CallReportsList = () => {
               Back to Dashboard
             </Link>
           </div>
-          
-          <button
-            onClick={handleLogout}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-red-900/20 hover:bg-red-900/30 border border-red-600/30 rounded-lg text-red-400 text-sm font-semibold transition"
-          >
-            <LogOut className="w-4 h-4" />
-            Logout
-          </button>
+
+          <div className="flex items-center gap-3">
+            <Link
+              to="/call-reports/analytics"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/30 rounded-lg text-amber-200 text-sm font-semibold transition"
+            >
+              <BarChart3 className="w-4 h-4" />
+              Analytics Dashboard
+            </Link>
+
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-900/20 hover:bg-red-900/30 border border-red-600/30 rounded-lg text-red-400 text-sm font-semibold transition"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* Title Section */}

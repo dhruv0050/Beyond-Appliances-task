@@ -1,0 +1,1050 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { Calendar, TrendingUp, Users, Phone, Award, ChevronDown, Filter, Store, BarChart3, AlertCircle, ThumbsUp, ArrowLeft } from 'lucide-react';
+
+const API_BASE = 'http://localhost:8000';
+
+const CallAggregatedDashboard = () => {
+  const [timeRange, setTimeRange] = useState('last30');
+  const [view, setView] = useState('overall');
+  const [selectedRegion, setSelectedRegion] = useState('South');
+  const [selectedCity, setSelectedCity] = useState('Bangalore');
+  const [selectedStore, setSelectedStore] = useState('');
+  const [storePeriod, setStorePeriod] = useState('week');
+  const [allCalls, setAllCalls] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAllData = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/call-reports`);
+        if (!res.ok) throw new Error('Failed to load call reports');
+        const json = await res.json();
+        setAllCalls(json.reports || []);
+      } catch (err) {
+        console.error('Error fetching audio calls:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAllData();
+  }, []);
+
+  const normalizeIntent = (rating) => {
+    const val = (rating || 'Medium').toString().toUpperCase();
+    if (val.includes('HIGH')) return 'High';
+    if (val.includes('MEDIUM')) return 'Medium';
+    if (val.includes('LOW')) return 'Low';
+    return 'Medium';
+  };
+
+  const normalizeExperience = (score) => {
+    if (score === undefined || score === null || score === '') return 'Medium';
+    if (typeof score === 'string') {
+      const val = score.toUpperCase();
+      if (val.includes('HIGH') || val.includes('5')) return 'High';
+      if (val.includes('MEDIUM') || val.includes('3')) return 'Medium';
+      if (val.includes('LOW') || val.includes('1')) return 'Low';
+      const num = parseFloat(score);
+      if (!Number.isNaN(num)) {
+        if (num >= 4) return 'High';
+        if (num >= 3) return 'Medium';
+        return 'Low';
+      }
+      return 'Medium';
+    }
+    if (typeof score === 'number') {
+      if (score >= 4) return 'High';
+      if (score >= 3) return 'Medium';
+      return 'Low';
+    }
+    return 'Medium';
+  };
+
+  const deriveType = (objective) => {
+    const text = (objective || '').toLowerCase();
+    const serviceKeywords = ['service', 'support', 'issue', 'complaint', 'warranty', 'return'];
+    const isService = serviceKeywords.some((k) => text.includes(k));
+    return isService ? 'Service' : 'Sales';
+  };
+
+  const ratingToScore = (value, fallback = 75) => {
+    if (value === undefined || value === null || value === '') return fallback;
+    const num = parseFloat(value);
+    if (Number.isNaN(num)) return fallback;
+    return Math.round(num * 20); // assume 1-5 scale
+  };
+
+  const audioCalls = useMemo(() => {
+    if (!allCalls.length) return [];
+
+    return allCalls.map((report) => {
+      const analysis = report.analysis || {};
+      const functional = analysis.Functional || {};
+      const customer = analysis.Customer_Information || {};
+      const agent = analysis.Agent_Areas || {};
+      const relax = agent.RELAX_Framework || {};
+      const soft = agent.SoftSkills_Etiquette || {};
+      const knowledge = agent.Verbal_Product_Knowledge || {};
+
+      const reach = relax.R_Reach_Out?.Rating;
+      const explore = relax.E_Explore_Needs?.Rating || relax.E_Explore?.Rating;
+      const link = relax.L_Link_Experience?.Rating;
+      const add = relax.A_Add_Value?.Rating;
+      const close = relax.X_Express_Closing?.Rating;
+
+      const rapportScore = ratingToScore(reach, 75);
+      const exploreScore = ratingToScore(explore, 75);
+      const listenScore = ratingToScore(link, 75);
+      const adviseScore = ratingToScore(add, 75);
+      const executeScore = ratingToScore(close, 75);
+
+      const relaxScores = [rapportScore, exploreScore, listenScore, adviseScore, executeScore];
+      const availableRelax = relaxScores.filter((s) => s !== undefined && s !== null);
+      const overallRelax = availableRelax.length
+        ? Math.round(availableRelax.reduce((a, b) => a + b, 0) / availableRelax.length)
+        : 75;
+
+      const productKnowledgeScore = ratingToScore(
+        knowledge.Description_Quality_Rating || knowledge.Technical_Knowledge_Rating,
+        75
+      );
+
+      const softSkillsScore = (() => {
+        const parts = [
+          ratingToScore(soft.Tone_and_Patience_Rating, null),
+          ratingToScore(soft.Hold_Management_Rating, null),
+          ratingToScore(soft.Agent_Language_Fluency_Score, null)
+        ].filter((s) => s !== null);
+        if (!parts.length) return 75;
+        return Math.round(parts.reduce((a, b) => a + b, 0) / parts.length);
+      })();
+
+      const intent = normalizeIntent(
+        customer.Intent_to_Purchase_Rating || customer.Intent_to_Visit_Rating || customer.Purchase_Intent_Rating
+      );
+      const experience = normalizeExperience(customer.Customer_Satisfaction_Score);
+
+      return {
+        id: report.call_id,
+        store: report.store_name || 'Unknown Store',
+        city: report.city || 'Unknown',
+        region: report.region || 'Unknown',
+        type: deriveType(functional.Call_Objective_Theme),
+        intent,
+        experience,
+        scores: {
+          overall: overallRelax,
+          rapport: rapportScore,
+          explore: exploreScore,
+          listen: listenScore,
+          advise: adviseScore,
+          execute: executeScore,
+          productKnowledge: productKnowledgeScore,
+          softSkills: softSkillsScore,
+        },
+      };
+    });
+  }, [allCalls]);
+
+  const filteredCalls = useMemo(() => {
+    if (view === 'region') {
+      return audioCalls.filter((call) => call.region === selectedRegion);
+    }
+    if (view === 'city') {
+      return audioCalls.filter((call) => call.city === selectedCity);
+    }
+    return audioCalls;
+  }, [audioCalls, view, selectedRegion, selectedCity]);
+
+  const metrics = useMemo(() => {
+    const total = filteredCalls.length;
+    const salesCalls = filteredCalls.filter((c) => c.type === 'Sales').length;
+    const serviceCalls = filteredCalls.filter((c) => c.type === 'Service').length;
+
+    const matrix = {};
+    ['High', 'Medium', 'Low'].forEach((intent) => {
+      matrix[intent] = {};
+      ['High', 'Medium', 'Low'].forEach((exp) => {
+        matrix[intent][exp] = filteredCalls.filter((c) => c.intent === intent && c.experience === exp).length;
+      });
+    });
+
+    const storeMetrics = {};
+    filteredCalls.forEach((call) => {
+      if (!storeMetrics[call.store]) {
+        storeMetrics[call.store] = {
+          storeName: call.store,
+          city: call.city,
+          region: call.region,
+          calls: [],
+        };
+      }
+      storeMetrics[call.store].calls.push(call);
+    });
+
+    const storePerformance = Object.values(storeMetrics)
+      .map((store) => {
+        const calls = store.calls;
+        const avgScore = (metric) =>
+          calls.length ? Math.round(calls.reduce((sum, c) => sum + c.scores[metric], 0) / calls.length) : 0;
+
+        return {
+          storeName: store.storeName,
+          city: store.city,
+          region: store.region,
+          totalCalls: calls.length,
+          overallScore: avgScore('overall'),
+          rapport: avgScore('rapport'),
+          explore: avgScore('explore'),
+          listen: avgScore('listen'),
+          advise: avgScore('advise'),
+          execute: avgScore('execute'),
+          productKnowledge: avgScore('productKnowledge'),
+          softSkills: avgScore('softSkills'),
+        };
+      })
+      .sort((a, b) => b.overallScore - a.overallScore);
+
+    return {
+      total,
+      salesCalls,
+      serviceCalls,
+      matrix,
+      storePerformance,
+    };
+  }, [filteredCalls]);
+
+  const getScoreColor = (score) => {
+    if (score >= 85) return 'text-emerald-600';
+    if (score >= 70) return 'text-amber-600';
+    return 'text-rose-600';
+  };
+
+  const getScoreBg = (score) => {
+    if (score >= 85) return 'bg-emerald-50';
+    if (score >= 70) return 'bg-amber-50';
+    return 'bg-rose-50';
+  };
+
+  const getMatrixColor = (count, max) => {
+    if (max === 0) return 'bg-[#16161d] text-gray-500';
+    const intensity = count / max;
+    if (intensity > 0.7) return 'bg-gradient-to-br from-amber-500 to-orange-600 text-gray-900 font-bold';
+    if (intensity > 0.4) return 'bg-gradient-to-br from-amber-400/80 to-orange-500/80 text-gray-900 font-semibold';
+    if (intensity > 0.2) return 'bg-amber-900/30 text-amber-300 border border-amber-600/30';
+    return 'bg-[#16161d] text-gray-500';
+  };
+
+  const maxMatrixValue = Math.max(...Object.values(metrics.matrix).flatMap((row) => Object.values(row)), 1);
+
+  const storeAnalysis = useMemo(() => {
+    if (!selectedStore || !metrics.storePerformance.length) {
+      const firstStore = metrics.storePerformance[0]?.storeName;
+      if (firstStore && selectedStore === '') {
+        setSelectedStore(firstStore);
+      }
+      return null;
+    }
+
+    const storeCalls = audioCalls.filter((c) => c.store === selectedStore);
+    const periods = [];
+    const now = new Date();
+
+    if (storePeriod === 'day') {
+      for (let i = 6; i >= 0; i -= 1) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+        const dayCalls = storeCalls.slice(i * Math.ceil(storeCalls.length / 7), (i + 1) * Math.ceil(storeCalls.length / 7));
+
+        periods.push({
+          label: `${dayName} ${dateStr}`,
+          calls: dayCalls,
+          count: dayCalls.length,
+        });
+      }
+    } else {
+      for (let i = 3; i >= 0; i -= 1) {
+        const weekEnd = new Date(now);
+        weekEnd.setDate(weekEnd.getDate() - i * 7);
+        const weekStart = new Date(weekEnd);
+        weekStart.setDate(weekStart.getDate() - 6);
+
+        const weekLabel = `Week ${4 - i}`;
+        const dateRange = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+
+        const weekCalls = storeCalls.slice(i * Math.ceil(storeCalls.length / 4), (i + 1) * Math.ceil(storeCalls.length / 4));
+
+        periods.push({
+          label: weekLabel,
+          dateRange,
+          calls: weekCalls,
+          count: weekCalls.length,
+        });
+      }
+    }
+
+    const temporalData = periods.map((period) => {
+      if (period.count === 0) {
+        return {
+          ...period,
+          overallScore: 0,
+          rapport: 0,
+          explore: 0,
+          listen: 0,
+          advise: 0,
+          execute: 0,
+          productKnowledge: 0,
+          softSkills: 0,
+        };
+      }
+
+      const avgScore = (metric) => Math.round(period.calls.reduce((sum, c) => sum + c.scores[metric], 0) / period.count);
+
+      return {
+        ...period,
+        overallScore: avgScore('overall'),
+        rapport: avgScore('rapport'),
+        explore: avgScore('explore'),
+        listen: avgScore('listen'),
+        advise: avgScore('advise'),
+        execute: avgScore('execute'),
+        productKnowledge: avgScore('productKnowledge'),
+        softSkills: avgScore('softSkills'),
+      };
+    });
+
+    const storeData = metrics.storePerformance.find((s) => s.storeName === selectedStore);
+    const avgOverall = storeData?.overallScore || 0;
+    const totalStoreCalls = storeCalls.length;
+
+    const scores = {
+      'Rapport Building': storeData?.rapport || 0,
+      Exploration: storeData?.explore || 0,
+      'Active Listening': storeData?.listen || 0,
+      Advisory: storeData?.advise || 0,
+      Execution: storeData?.execute || 0,
+      'Product Knowledge': storeData?.productKnowledge || 0,
+      'Soft Skills': storeData?.softSkills || 0,
+    };
+
+    const sortedScores = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    const strengths = sortedScores.slice(0, 2);
+    const weaknesses = sortedScores.slice(-2).reverse();
+
+    const highExpCalls = storeCalls.filter((c) => c.experience === 'High').length;
+    const medExpCalls = storeCalls.filter((c) => c.experience === 'Medium').length;
+    const lowExpCalls = storeCalls.filter((c) => c.experience === 'Low').length;
+    const expPercentage = totalStoreCalls ? Math.round((highExpCalls / totalStoreCalls) * 100) : 0;
+
+    const highIntentCalls = storeCalls.filter((c) => c.intent === 'High').length;
+    const conversionPotential = totalStoreCalls ? Math.round((highIntentCalls / totalStoreCalls) * 100) : 0;
+
+    const recentPeriods = temporalData.slice(-3);
+    const trend = recentPeriods.length >= 2
+      ? recentPeriods[recentPeriods.length - 1].overallScore - recentPeriods[0].overallScore
+      : 0;
+
+    const performanceSummary = avgOverall >= 85
+      ? `${selectedStore} demonstrates excellent performance with an overall score of ${avgOverall}. The team consistently delivers high-quality customer interactions across all touchpoints.`
+      : avgOverall >= 70
+        ? `${selectedStore} shows good performance with an overall score of ${avgOverall}. Fundamentals are strong with room for optimization in specific areas.`
+        : `${selectedStore} has an overall score of ${avgOverall}, indicating significant opportunities for improvement. Focused training and process refinement are recommended.`;
+
+    const trendAnalysis = trend > 5
+      ? ` Recent trends show positive momentum with a ${trend}-point improvement.`
+      : trend < -5
+        ? ` Recent performance has declined by ${Math.abs(trend)} points, requiring attention.`
+        : ' Performance has remained stable in recent periods.';
+
+    const improvementAreas = weaknesses.length > 0
+      ? `Primary focus areas include ${weaknesses[0][0]} (${weaknesses[0][1]}/100) and ${weaknesses[1][0]} (${weaknesses[1][1]}/100). `
+        + `${weaknesses[0][1] < 70 ? `${weaknesses[0][0]} needs targeted coaching and playbook reinforcement.` : 'Incremental improvements here will lift overall performance.'}`
+      : 'Performance metrics are balanced. Focus on maintaining consistency and exploring advanced techniques.';
+
+    const customerExpSummary = expPercentage >= 60
+      ? `Customer experience is strong with ${expPercentage}% of interactions rated high quality. ${conversionPotential}% of calls show high purchase intent, representing solid conversion opportunities.`
+      : expPercentage >= 40
+        ? `Customer experience is moderate with ${expPercentage}% high-quality interactions. Elevating the ${medExpCalls + lowExpCalls} medium/low experience calls will lift satisfaction scores.`
+        : `Customer experience needs improvement with only ${expPercentage}% high-quality interactions. ${highIntentCalls > 0 ? `Despite ${conversionPotential}% high-intent calls, experience gaps may be impacting conversions.` : 'Low intent signals suggest the need for better qualification and engagement strategies.'}`;
+
+    return {
+      temporalData,
+      analysis: {
+        performanceSummary: performanceSummary + trendAnalysis,
+        improvementAreas,
+        customerExpSummary,
+        strengths: strengths.map((s) => ({ name: s[0], score: s[1] })),
+        weaknesses: weaknesses.map((s) => ({ name: s[0], score: s[1] })),
+        totalCalls: totalStoreCalls,
+        avgScore: avgOverall,
+        expBreakdown: { high: highExpCalls, medium: medExpCalls, low: lowExpCalls },
+      },
+    };
+  }, [selectedStore, storePeriod, audioCalls, metrics.storePerformance]);
+
+  const regions = ['South', 'West', 'North', 'East'];
+  const cities = ['Bangalore', 'Mumbai', 'Hyderabad', 'Chennai', 'Delhi'];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-600">Loading call analytics...</div>
+      </div>
+    );
+  }
+
+  if (!audioCalls.length) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">No audio call data available for aggregated view.</p>
+          <Link to="/call-reports" className="text-blue-600 hover:text-blue-700 font-semibold">
+            ← Back to Call Reports
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#08080c] text-gray-100" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+      {/* Grain texture overlay */}
+      <div className="fixed inset-0 opacity-[0.03] pointer-events-none" style={{
+        backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E\")"
+      }}></div>
+
+      {/* Header */}
+      <div className="bg-gradient-to-br from-[#0f0f14] to-[#16161d] border-b border-white/6 shadow-2xl relative z-10">
+        <div className="max-w-[1600px] mx-auto px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link to="/call-reports" className="p-2 hover:bg-white/5 rounded-lg transition">
+                <ArrowLeft className="w-5 h-5 text-gray-400" />
+              </Link>
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight mb-1" style={{ fontFamily: "'Fraunces', serif", letterSpacing: '-0.02em' }}>
+                  Audio Call Analytics
+                </h1>
+                <p className="text-gray-400 text-sm">Aggregated insights across recorded calls</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 bg-[#16161d] border border-white/6 rounded-lg px-4 py-2">
+              <Calendar className="w-4 h-4 text-gray-500" />
+              <select
+                value={timeRange}
+                onChange={(e) => setTimeRange(e.target.value)}
+                className="bg-transparent text-sm font-medium cursor-pointer outline-none text-gray-200"
+                style={{ colorScheme: 'dark' }}
+              >
+                <option value="last7" className="bg-[#1a1a1f] text-gray-200">Last 7 Days</option>
+                <option value="last30" className="bg-[#1a1a1f] text-gray-200">Last 30 Days</option>
+                <option value="last90" className="bg-[#1a1a1f] text-gray-200">Last 90 Days</option>
+                <option value="ytd" className="bg-[#1a1a1f] text-gray-200">Year to Date</option>
+              </select>
+              <ChevronDown className="w-4 h-4 text-gray-500" />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 mt-6">
+            <button
+              onClick={() => setView('overall')}
+              className={`px-6 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                view === 'overall'
+                  ? 'bg-amber-500 text-gray-900 shadow-lg'
+                  : 'text-gray-400 hover:text-gray-100 hover:bg-white/5'
+              }`}
+            >
+              Overall Overview
+            </button>
+            <button
+              onClick={() => setView('region')}
+              className={`px-6 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                view === 'region'
+                  ? 'bg-amber-500 text-gray-900 shadow-lg'
+                  : 'text-gray-400 hover:text-gray-100 hover:bg-white/5'
+              }`}
+            >
+              Region-wise
+            </button>
+            <button
+              onClick={() => setView('city')}
+              className={`px-6 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                view === 'city'
+                  ? 'bg-amber-500 text-gray-900 shadow-lg'
+                  : 'text-gray-400 hover:text-gray-100 hover:bg-white/5'
+              }`}
+            >
+              City-wise
+            </button>
+
+            {view === 'region' && (
+              <div className="flex items-center gap-2 ml-8 pl-8 border-l border-white/10">
+                <Filter className="w-4 h-4 text-gray-500" />
+                {regions.map((region) => (
+                  <button
+                    key={region}
+                    onClick={() => setSelectedRegion(region)}
+                    className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                      selectedRegion === region
+                        ? 'bg-amber-500 text-gray-900'
+                        : 'bg-[#16161d] text-gray-400 hover:bg-white/5 hover:text-gray-100'
+                    }`}
+                  >
+                    {region}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {view === 'city' && (
+              <div className="flex items-center gap-3 ml-8 pl-8 border-l border-white/10 bg-[#16161d] border border-white/6 rounded-lg px-4 py-2">
+                <Filter className="w-4 h-4 text-gray-500" />
+                <select
+                  value={selectedCity}
+                  onChange={(e) => setSelectedCity(e.target.value)}
+                  className="bg-transparent font-medium cursor-pointer outline-none text-gray-200"
+                  style={{ colorScheme: 'dark' }}
+                >
+                  {cities.map((city) => (
+                    <option key={city} value={city} className="bg-[#1a1a1f] text-gray-200">
+                      {city}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-gray-500" />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-[1600px] mx-auto px-8 py-8 relative z-10">
+        {/* KPI Cards */}
+        <div className="grid grid-cols-3 gap-6 mb-8">
+          <div className="bg-[#0f0f14] border border-white/6 rounded-2xl p-6 hover:shadow-md transition-shadow relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-indigo-600 to-transparent"></div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-indigo-900/20 rounded-lg">
+                <Phone className="w-6 h-6 text-indigo-400" />
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-bold text-gray-100">{metrics.total.toLocaleString()}</p>
+                <p className="text-sm text-gray-400 mt-1">Total Calls Analyzed</p>
+              </div>
+            </div>
+            <div className="pt-4 border-t border-white/6">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Avg. per store</span>
+                <span className="font-semibold text-gray-100">
+                  {metrics.storePerformance.length ? Math.round(metrics.total / metrics.storePerformance.length) : 0}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[#0f0f14] border border-white/6 rounded-2xl p-6 hover:shadow-md transition-shadow relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-emerald-600 to-transparent"></div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-emerald-900/20 rounded-lg">
+                <TrendingUp className="w-6 h-6 text-emerald-400" />
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-bold text-emerald-400">{metrics.salesCalls}</p>
+                <p className="text-sm text-gray-400 mt-1">Sales Calls</p>
+              </div>
+            </div>
+            <div className="pt-4 border-t border-white/6">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Sales Ratio</span>
+                <span className="font-semibold text-gray-100">
+                  {metrics.total ? Math.round((metrics.salesCalls / metrics.total) * 100) : 0}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[#0f0f14] border border-white/6 rounded-2xl p-6 hover:shadow-md transition-shadow relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-blue-600 to-transparent"></div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-blue-900/20 rounded-lg">
+                <Users className="w-6 h-6 text-blue-400" />
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-bold text-blue-400">{metrics.serviceCalls}</p>
+                <p className="text-sm text-gray-400 mt-1">Service Calls</p>
+              </div>
+            </div>
+            <div className="pt-4 border-t border-white/6">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Service Ratio</span>
+                <span className="font-semibold text-gray-100">
+                  {metrics.total ? Math.round((metrics.serviceCalls / metrics.total) * 100) : 0}%
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Intent x Customer Experience Matrix */}
+        <div className="bg-[#0f0f14] border border-white/6 rounded-2xl p-8 mb-8">
+          <h2 className="text-xl font-semibold text-gray-100 mb-6 flex items-center gap-3" style={{ fontFamily: "'Fraunces', serif" }}>
+            <Award className="w-6 h-6 text-amber-400" />
+            Intent × Customer Experience Matrix
+          </h2>
+
+          <div className="overflow-hidden">
+            <div className="grid grid-cols-4 gap-3">
+              <div></div>
+              <div className="text-center font-semibold text-sm text-gray-300 py-3">High Experience</div>
+              <div className="text-center font-semibold text-sm text-gray-300 py-3">Medium Experience</div>
+              <div className="text-center font-semibold text-sm text-gray-300 py-3">Low Experience</div>
+
+              {['High', 'Medium', 'Low'].map((intent) => (
+                <React.Fragment key={intent}>
+                  <div className="flex items-center font-semibold text-sm text-gray-300 pr-4 justify-end">
+                    {intent} Intent
+                  </div>
+                  {['High', 'Medium', 'Low'].map((exp) => (
+                    <div
+                      key={`${intent}-${exp}`}
+                      className={`rounded-lg p-6 text-center transition-all hover:scale-105 ${getMatrixColor(metrics.matrix[intent][exp], maxMatrixValue)}`}
+                    >
+                      <div className="text-3xl font-bold mb-1">{metrics.matrix[intent][exp]}</div>
+                      <div className="text-xs opacity-75">calls</div>
+                    </div>
+                  ))}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-6 pt-6 border-t border-white/6">
+            <div className="flex items-center gap-6 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-gradient-to-br from-amber-500 to-orange-600"></div>
+                <span className="text-gray-400">High Volume</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-gradient-to-br from-amber-400/80 to-orange-500/80"></div>
+                <span className="text-gray-400">Medium Volume</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-amber-900/30 border border-amber-600/30"></div>
+                <span className="text-gray-400">Low Volume</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Store Performance Table */}
+        <div className="bg-[#0f0f14] border border-white/6 rounded-2xl overflow-hidden mb-8">
+          <div className="p-8 border-b border-white/6">
+            <h2 className="text-xl font-semibold text-gray-100 flex items-center gap-3" style={{ fontFamily: "'Fraunces', serif" }}>
+              <TrendingUp className="w-6 h-6 text-amber-400" />
+              Store Performance Analysis
+            </h2>
+            <p className="text-sm text-gray-400 mt-1">RELAX Framework Scores & Key Metrics</p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-[#16161d] border-b border-white/6">
+                <tr>
+                  <th className="text-left px-8 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Store Name
+                  </th>
+                  <th className="text-center px-4 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    # Calls
+                  </th>
+                  <th className="text-center px-4 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Overall Score
+                  </th>
+                  <th className="text-center px-4 py-4 text-xs font-semibold text-amber-400 uppercase tracking-wider border-l border-white/6">
+                    R
+                  </th>
+                  <th className="text-center px-4 py-4 text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                    E
+                  </th>
+                  <th className="text-center px-4 py-4 text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                    L
+                  </th>
+                  <th className="text-center px-4 py-4 text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                    A
+                  </th>
+                  <th className="text-center px-4 py-4 text-xs font-semibold text-amber-400 uppercase tracking-wider border-r border-white/6">
+                    X
+                  </th>
+                  <th className="text-center px-4 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Product Knowledge
+                  </th>
+                  <th className="text-center px-4 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Soft Skills
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/6">
+                {metrics.storePerformance.map((store) => (
+                  <tr key={store.storeName} className="hover:bg-white/5 transition-colors">
+                    <td className="px-8 py-5">
+                      <div>
+                        <div className="font-semibold text-gray-100">{store.storeName}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">{store.city}, {store.region}</div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-5 text-center">
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-[#16161d] text-gray-300">
+                        {store.totalCalls}
+                      </span>
+                    </td>
+                    <td className="px-4 py-5 text-center">
+                      <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold ${getScoreBg(store.overallScore)} ${getScoreColor(store.overallScore)}`}>
+                        {store.overallScore}
+                      </span>
+                    </td>
+                    <td className="px-4 py-5 text-center border-l border-white/6">
+                      <span className="font-semibold text-gray-300">{store.rapport}</span>
+                    </td>
+                    <td className="px-4 py-5 text-center">
+                      <span className="font-semibold text-gray-300">{store.explore}</span>
+                    </td>
+                    <td className="px-4 py-5 text-center">
+                      <span className="font-semibold text-gray-300">{store.listen}</span>
+                    </td>
+                    <td className="px-4 py-5 text-center">
+                      <span className="font-semibold text-gray-300">{store.advise}</span>
+                    </td>
+                    <td className="px-4 py-5 text-center border-r border-white/6">
+                      <span className="font-semibold text-gray-300">{store.execute}</span>
+                    </td>
+                    <td className="px-4 py-5 text-center">
+                      <span className={`font-semibold ${getScoreColor(store.productKnowledge)}`}>
+                        {store.productKnowledge}
+                      </span>
+                    </td>
+                    <td className="px-4 py-5 text-center">
+                      <span className={`font-semibold ${getScoreColor(store.softSkills)}`}>
+                        {store.softSkills}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="px-8 py-4 bg-[#16161d] border-t border-white/6">
+            <div className="flex items-center justify-between text-xs text-gray-400">
+              <div>
+                <span className="font-semibold">RELAX Framework:</span>
+                <span className="ml-2">R = Rapport | E = Explore | L = Listen | A = Advise | X = Execute</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                  <span>85+ Excellent</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                  <span>70-84 Good</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-rose-500"></div>
+                  <span>&lt;70 Needs Improvement</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Store-wise Deep Dive */}
+        {storeAnalysis && metrics.storePerformance.length > 0 && (
+          <div className="bg-[#0f0f14] border border-white/6 rounded-2xl overflow-hidden">
+            <div className="p-8 border-b border-white/6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-100 flex items-center gap-3" style={{ fontFamily: "'Fraunces', serif" }}>
+                    <Store className="w-6 h-6 text-amber-400" />
+                    Store-wise Deep Dive
+                  </h2>
+                  <p className="text-sm text-gray-400 mt-1">Temporal performance trends and detailed analytics</p>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3 bg-[#16161d] rounded-lg px-4 py-2.5 border border-white/6">
+                    <Store className="w-4 h-4 text-gray-500" />
+                    <select
+                      value={selectedStore}
+                      onChange={(e) => setSelectedStore(e.target.value)}
+                      className="bg-transparent font-medium text-sm cursor-pointer outline-none text-gray-200 min-w-[200px]"
+                      style={{ colorScheme: 'dark' }}
+                    >
+                      {metrics.storePerformance.map((store) => (
+                        <option key={store.storeName} value={store.storeName} className="bg-[#1a1a1f] text-gray-200">
+                          {store.storeName}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-gray-500" />
+                  </div>
+
+                  <div className="flex items-center bg-[#16161d] border border-white/6 rounded-lg p-1">
+                    <button
+                      onClick={() => setStorePeriod('day')}
+                      className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                        storePeriod === 'day'
+                          ? 'bg-amber-500 text-gray-900 shadow-sm'
+                          : 'text-gray-400 hover:text-gray-100'
+                      }`}
+                    >
+                      Daily
+                    </button>
+                    <button
+                      onClick={() => setStorePeriod('week')}
+                      className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                        storePeriod === 'week'
+                          ? 'bg-amber-500 text-gray-900 shadow-sm'
+                          : 'text-gray-400 hover:text-gray-100'
+                      }`}
+                    >
+                      Weekly
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 border-b border-white/6">
+              <div className="flex items-center gap-2 mb-6">
+                <BarChart3 className="w-5 h-5 text-amber-400" />
+                <h3 className="text-lg font-semibold text-gray-100" style={{ fontFamily: "'Fraunces', serif" }}>
+                  Performance Over Time
+                </h3>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-[#16161d]">
+                    <tr>
+                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                        {storePeriod === 'day' ? 'Day' : 'Week'}
+                      </th>
+                      <th className="text-center px-4 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                        # Calls
+                      </th>
+                      <th className="text-center px-4 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                        Overall Score
+                      </th>
+                      <th className="text-center px-4 py-4 text-xs font-semibold text-amber-400 uppercase tracking-wider border-l border-white/6">
+                        R
+                      </th>
+                      <th className="text-center px-4 py-4 text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                        E
+                      </th>
+                      <th className="text-center px-4 py-4 text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                        L
+                      </th>
+                      <th className="text-center px-4 py-4 text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                        A
+                      </th>
+                      <th className="text-center px-4 py-4 text-xs font-semibold text-amber-400 uppercase tracking-wider border-r border-white/6">
+                        X
+                      </th>
+                      <th className="text-center px-4 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                        Product Knowledge
+                      </th>
+                      <th className="text-center px-4 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                        Soft Skills
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/6">
+                    {storeAnalysis.temporalData.map((period, idx) => (
+                      <tr key={idx} className="hover:bg-white/5 transition-colors">
+                        <td className="px-6 py-4">
+                          <div>
+                            <div className="font-semibold text-gray-100">{period.label}</div>
+                            {period.dateRange && <div className="text-xs text-gray-400 mt-0.5">{period.dateRange}</div>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-[#16161d] text-gray-300">
+                            {period.count}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          {period.count > 0 ? (
+                            <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold ${getScoreBg(period.overallScore)} ${getScoreColor(period.overallScore)}`}>
+                              {period.overallScore}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500 text-sm">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 text-center border-l border-white/6">
+                          <span className={`font-semibold ${period.count > 0 ? 'text-gray-300' : 'text-gray-500'}`}>
+                            {period.count > 0 ? period.rapport : '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span className={`font-semibold ${period.count > 0 ? 'text-gray-300' : 'text-gray-500'}`}>
+                            {period.count > 0 ? period.explore : '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span className={`font-semibold ${period.count > 0 ? 'text-gray-300' : 'text-gray-500'}`}>
+                            {period.count > 0 ? period.listen : '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span className={`font-semibold ${period.count > 0 ? 'text-gray-300' : 'text-gray-500'}`}>
+                            {period.count > 0 ? period.advise : '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center border-r border-white/6">
+                          <span className={`font-semibold ${period.count > 0 ? 'text-gray-300' : 'text-gray-500'}`}>
+                            {period.count > 0 ? period.execute : '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          {period.count > 0 ? (
+                            <span className={`font-semibold ${getScoreColor(period.productKnowledge)}`}>
+                              {period.productKnowledge}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          {period.count > 0 ? (
+                            <span className={`font-semibold ${getScoreColor(period.softSkills)}`}>
+                              {period.softSkills}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* AI-Powered Insights */}
+            <div className="p-8 bg-gradient-to-br from-[#0f0f14] to-[#16161d]">
+              <div className="flex items-center gap-2 mb-6">
+                <TrendingUp className="w-5 h-5 text-amber-400" />
+                <h3 className="text-lg font-semibold text-gray-100" style={{ fontFamily: "'Fraunces', serif" }}>
+                  AI-Powered Insights & Recommendations
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-3 gap-6">
+                <div className="bg-[#16161d] border border-white/6 rounded-lg p-6 hover:shadow-md transition-shadow">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="p-2 bg-blue-900/20 rounded-lg">
+                      <BarChart3 className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-gray-100 mb-1">Store Performance Summary</h4>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getScoreBg(storeAnalysis.analysis.avgScore)} ${getScoreColor(storeAnalysis.analysis.avgScore)}`}>
+                          {storeAnalysis.analysis.avgScore}/100
+                        </span>
+                        <span className="text-gray-500">•</span>
+                        <span className="text-gray-400">{storeAnalysis.analysis.totalCalls} calls analyzed</span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-300 leading-relaxed">{storeAnalysis.analysis.performanceSummary}</p>
+                  <div className="mt-4 pt-4 border-t border-white/6">
+                    <div className="text-xs font-semibold text-gray-400 mb-2">Top Strengths:</div>
+                    <div className="flex flex-col gap-1">
+                      {storeAnalysis.analysis.strengths.map((strength, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <span className="text-gray-300">{strength.name}</span>
+                          <span className={`font-bold ${getScoreColor(strength.score)}`}>{strength.score}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#16161d] border border-white/6 rounded-lg p-6 hover:shadow-md transition-shadow">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="p-2 bg-amber-900/20 rounded-lg">
+                      <AlertCircle className="w-5 h-5 text-amber-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-gray-100 mb-1">Improvement Areas</h4>
+                      <div className="text-xs text-gray-400">Priority focus recommendations</div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-300 leading-relaxed">{storeAnalysis.analysis.improvementAreas}</p>
+                  <div className="mt-4 pt-4 border-t border-white/6">
+                    <div className="text-xs font-semibold text-gray-400 mb-2">Development Priorities:</div>
+                    <div className="flex flex-col gap-1">
+                      {storeAnalysis.analysis.weaknesses.map((weakness, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <span className="text-gray-300">{weakness.name}</span>
+                          <span className={`font-bold ${getScoreColor(weakness.score)}`}>{weakness.score}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#16161d] border border-white/6 rounded-lg p-6 hover:shadow-md transition-shadow">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="p-2 bg-emerald-900/20 rounded-lg">
+                      <ThumbsUp className="w-5 h-5 text-emerald-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-gray-100 mb-1">Customer Experience Summary</h4>
+                      <div className="text-xs text-gray-400">Interaction quality & satisfaction</div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-300 leading-relaxed">{storeAnalysis.analysis.customerExpSummary}</p>
+                  <div className="mt-4 pt-4 border-t border-white/6">
+                    <div className="text-xs font-semibold text-gray-400 mb-2">Experience Breakdown:</div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                          <span className="text-gray-300">High Quality</span>
+                        </div>
+                        <span className="font-bold text-gray-100">{storeAnalysis.analysis.expBreakdown.high}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                          <span className="text-gray-300">Medium Quality</span>
+                        </div>
+                        <span className="font-bold text-gray-100">{storeAnalysis.analysis.expBreakdown.medium}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-rose-500"></div>
+                          <span className="text-gray-300">Low Quality</span>
+                        </div>
+                        <span className="font-bold text-gray-100">{storeAnalysis.analysis.expBreakdown.low}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default CallAggregatedDashboard;

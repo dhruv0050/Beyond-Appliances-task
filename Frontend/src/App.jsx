@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import Landing from './components/landing';
 import ReportPage from './components/ReportPage';
 import AggregatedDashboard from './components/AggregatedDashboard';
+import CallAggregatedDashboard from './components/CallAggregatedDashboard';
 import CallReportsList from './components/CallReportsList';
 import CallReportDetail from './components/CallReportDetail';
 
@@ -32,6 +33,7 @@ function App() {
           {/* Audio Call Reports Routes */}
           <Route path="/call-reports" element={<ProtectedRoute><CallReportsList /></ProtectedRoute>} />
           <Route path="/call-reports/:callId" element={<ProtectedRoute><CallReportDetail /></ProtectedRoute>} />
+          <Route path="/call-reports/analytics" element={<ProtectedRoute><CallAggregatedDashboard /></ProtectedRoute>} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" />} />
