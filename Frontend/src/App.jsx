@@ -3,12 +3,11 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import './App.css';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
-import Landing from './components/landing';
-import ReportPage from './components/ReportPage';
-import AggregatedDashboard from './components/AggregatedDashboard';
 import CallAggregatedDashboard from './components/CallAggregatedDashboard';
 import CallReportsList from './components/CallReportsList';
 import CallReportDetail from './components/CallReportDetail';
+import VideoCallsList from './components/VideoCallsList';
+import VideoCallDetail from './components/VideoCallDetail';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -26,14 +25,16 @@ function App() {
 
           {/* Protected Routes */}
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/video-analysis" element={<ProtectedRoute><Landing /></ProtectedRoute>} />
-          <Route path="/video-analysis/report/:id" element={<ProtectedRoute><ReportPage /></ProtectedRoute>} />
-          <Route path="/video-analysis/analytics" element={<ProtectedRoute><AggregatedDashboard /></ProtectedRoute>} />
+
 
           {/* Audio Call Reports Routes */}
           <Route path="/call-reports" element={<ProtectedRoute><CallReportsList /></ProtectedRoute>} />
           <Route path="/call-reports/:callId" element={<ProtectedRoute><CallReportDetail /></ProtectedRoute>} />
           <Route path="/call-reports/analytics" element={<ProtectedRoute><CallAggregatedDashboard /></ProtectedRoute>} />
+
+          {/* Video Call Reports Routes */}
+          <Route path="/video-reports" element={<ProtectedRoute><VideoCallsList /></ProtectedRoute>} />
+          <Route path="/video-reports/:reportId" element={<ProtectedRoute><VideoCallDetail /></ProtectedRoute>} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" />} />

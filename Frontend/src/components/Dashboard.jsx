@@ -83,9 +83,9 @@ const Dashboard = () => {
               </div>
             </button>
 
-            {/* Video Call Reports */}
+            {/* Video Call Reports - NEW */}
             <button
-              onClick={() => navigate('/video-analysis')}
+              onClick={() => navigate('/video-reports')}
               className="group bg-[#0f0f14] border border-white/6 rounded-2xl p-8 hover:border-amber-500/50 transition overflow-hidden relative"
             >
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-amber-600 to-transparent opacity-0 group-hover:opacity-100 transition"></div>
@@ -100,11 +100,11 @@ const Dashboard = () => {
                 Video Call Reports
               </h3>
               <p className="text-gray-400 text-sm text-left leading-relaxed mb-6">
-                Submit and analyze video call recordings from Google Drive with AI-powered insights and detailed performance breakdowns.
+                Analyze and review video call recordings with AI-powered insights, agent performance metrics, and customer interaction analysis.
               </p>
 
               <div className="flex items-center gap-2 text-amber-400 text-sm font-semibold">
-                <span>Analyze Videos</span>
+                <span>View Video Reports</span>
                 <svg className="w-4 h-4 group-hover:translate-x-1 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>

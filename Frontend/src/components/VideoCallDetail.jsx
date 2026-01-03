@@ -1,0 +1,563 @@
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronDown } from 'lucide-react';
+
+const getScoreColor = (score) => {
+  if (score === 5) return 'text-green-500';
+  if (score === 4) return 'text-emerald-400';
+  if (score === 3) return 'text-amber-400';
+  if (score === 2) return 'text-orange-400';
+  return 'text-red-400';
+};
+
+const getIntentBadgeColor = (intent) => {
+  if ((intent || '').toUpperCase() === 'HIGH') return 'bg-green-500/15 text-green-300 border-green-500/30';
+  if ((intent || '').toUpperCase() === 'MED' || (intent || '').toUpperCase() === 'MEDIUM') return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
+  return 'bg-red-500/15 text-red-300 border-red-500/30';
+};
+
+const getAidaSteps = (currentStage) => {
+  const stages = ['Awareness', 'Interest', 'Desire', 'Action'];
+  const currentIndex = stages.findIndex((s) => s.toLowerCase() === (currentStage || '').toLowerCase());
+  return stages.map((stage, index) => ({
+    letter: stage[0],
+    active: index <= currentIndex && currentIndex !== -1
+  }));
+};
+
+const intentClass = (value) => {
+  if ((value || '').toUpperCase() === 'HIGH') return 'high';
+  if ((value || '').toUpperCase() === 'MED') return 'medium';
+  return 'low';
+};
+
+const VideoCallDetail = () => {
+  const { reportId } = useParams();
+  const navigate = useNavigate();
+  const [analysis, setAnalysis] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+
+  useEffect(() => {
+    const fetchReport = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`http://localhost:8000/api/video-reports/${reportId}`);
+        if (!response.ok) throw new Error('Failed to fetch report');
+        const data = await response.json();
+        setAnalysis(data.analysis || data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReport();
+  }, [reportId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#08080c] flex items-center justify-center text-white text-lg">Loading report...</div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#08080c] flex items-center justify-center text-red-400 text-lg">Error: {error}</div>
+    );
+  }
+
+  if (!analysis) {
+    return (
+      <div className="min-h-screen bg-[#08080c] flex items-center justify-center text-white text-lg">No report found</div>
+    );
+  }
+
+  const functional = analysis.Functional || {};
+  const customer = analysis.Customer_Information || {};
+  const agentAreas = analysis.Agent_Areas || {};
+  const productDemo = agentAreas.Product_Demonstration || {};
+  const relaxFramework = agentAreas.RELAX_Framework || {};
+  const softSkills = agentAreas.SoftSkills || {};
+  const invitation = agentAreas.The_Invitation_to_Visit || {};
+  const languageFluency = agentAreas.Agent_Language_Fluency || {};
+  const overallSummary = agentAreas.Overall_Summary || {};
+  const transcript = agentAreas.Transcript || {};
+  const presentability = functional.Agent_Presentability || {};
+
+  const noiseBg = "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E\")";
+
+  return (
+    <div className="min-h-screen bg-[#08080c] text-white relative">
+      <div
+        className="pointer-events-none fixed inset-0 opacity-10 mix-blend-soft-light"
+        style={{ backgroundImage: noiseBg }}
+      />
+      <div className="max-w-6xl mx-auto px-6 py-8 space-y-6 relative z-10">
+
+        {/* Back Button */}
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-amber-400 hover:text-amber-300 transition-colors"
+        >
+          <ChevronLeft className="w-5 h-5" />
+          <span className="text-sm font-medium">Back to Reports</span>
+        </button>
+
+        {/* Section 1: Call Metadata */}
+        <header className="rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f0f14] to-[#16161d] p-8 shadow-2xl">
+          <div className="flex flex-col lg:flex-row gap-6 justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="px-3 py-1 rounded-full border border-purple-500/40 bg-purple-500/10 text-xs font-mono text-purple-200 tracking-wide">
+                  CALL ID: {functional.Call_ID || 'N/A'}
+                </span>
+                <span className="px-3 py-1 rounded-full border border-purple-500/30 bg-purple-500/15 text-[11px] font-semibold uppercase tracking-wide text-purple-200">
+                  Video Call
+                </span>
+              </div>
+              <h1 className="text-3xl font-['Fraunces',serif] font-semibold tracking-tight">
+                {functional.Store_Location || 'Store Location'}
+              </h1>
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm font-medium">
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-amber-300">
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {functional.Call_Objective_Theme || 'Product Inquiry'}
+              </span>
+            </div>
+
+            <div className="flex flex-col items-end gap-3">
+              <div className="flex items-center gap-5">
+                {[{
+                  label: 'Agent Video',
+                  value: functional.Agent_Video_Quality_Rating,
+                  active: 'bg-purple-400'
+                }, {
+                  label: 'Agent Audio',
+                  value: functional.Agent_Audio_Quality_Rating,
+                  active: 'bg-green-400'
+                }, {
+                  label: 'Customer Audio',
+                  value: functional.Customer_Audio_Quality_Rating,
+                  active: 'bg-amber-400'
+                }].map((q, idx) => (
+                  <div key={idx} className="flex flex-col items-end gap-1">
+                    <span className="text-[10px] uppercase tracking-[0.08em] text-gray-400">{q.label}</span>
+                    <div className="flex items-end gap-1 h-5">
+                      {[0, 1, 2, 3, 4].map((bar) => (
+                        <span
+                          key={bar}
+                          className={`w-1.5 rounded-sm ${bar < (q.value || 0) ? q.active : 'bg-gray-700'}`}
+                          style={{ height: `${6 + bar * 4}px` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[{
+              label: 'Call Time', value: functional.Call_Time
+            }, {
+              label: 'Store Location', value: functional.Store_Location
+            }, {
+              label: 'Customer', value: functional.Customer_Name
+            }, {
+              label: 'Customer Location', value: functional.Customer_Location
+            }, {
+              label: 'Agent', value: functional.Agent_Name
+            }, {
+              label: 'Customer Language', value: functional.Customer_Language
+            }, {
+              label: 'Call Type', value: customer.Type_of_Call
+            }, {
+              label: 'Product of Interest', value: functional.Product_of_Interest
+            }].map((item, idx) => (
+              <div key={idx} className="flex flex-col gap-1 rounded-lg bg-[#16161d] border border-white/5 p-4">
+                <span className="text-[11px] uppercase tracking-[0.08em] text-gray-500">{item.label}</span>
+                <span className="text-sm font-medium text-white/90">{item.value || 'N/A'}</span>
+              </div>
+            ))}
+          </div>
+        </header>
+
+        {/* Section 2: Customer Insights */}
+        <section className="rounded-2xl border border-white/10 bg-[#0f0f14] p-7 space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-['Fraunces',serif] font-semibold">Customer Insights</h2>
+            <span className="text-sm text-gray-500">Intent & Satisfaction</span>
+          </div>
+
+          <div className="flex flex-col xl:flex-row gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
+              {[{
+                label: 'Intent to Purchase',
+                value: customer.Intent_to_Purchase_Rating,
+                badge: customer.Intent_to_Purchase_Rating,
+                className: intentClass(customer.Intent_to_Purchase_Rating)
+              }, {
+                label: 'Customer Satisfaction',
+                value: `${customer.Customer_Satisfaction_Score || 0}/5`,
+                badge: 'Satisfied',
+                className: 'high'
+              }, {
+                label: 'Business Satisfaction',
+                value: `${customer.Business_Satisfaction_Score || 0}/5`,
+                badge: 'Visit Secured',
+                className: 'high'
+              }].map((card, idx) => (
+                <div key={idx} className={`rounded-xl border border-white/10 bg-[#16161d] px-6 py-5 text-center`}> 
+                  <p className="text-[11px] uppercase tracking-[0.08em] text-gray-500 mb-2">{card.label}</p>
+                  <div className={`text-4xl font-['Fraunces',serif] font-semibold mb-2 ${card.className === 'high' ? 'text-green-400' : card.className === 'medium' ? 'text-amber-400' : 'text-red-400'}`}>
+                    {card.value || 'N/A'}
+                  </div>
+                  <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${card.className === 'high' ? 'bg-green-500/15 text-green-300' : card.className === 'medium' ? 'bg-amber-500/15 text-amber-300' : 'bg-red-500/15 text-red-300'}`}>
+                    <span className="w-2 h-2 rounded-full bg-current" />
+                    {card.badge || 'LOW'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 flex-[1.2]">
+              <div className="rounded-xl bg-[#16161d] border border-white/5 p-4 space-y-3">
+                <p className="text-[11px] uppercase tracking-[0.08em] text-gray-500">Intent to Visit</p>
+                <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold ${getIntentBadgeColor(customer.Intent_to_Visit_Rating || 'LOW')}`}>
+                  <span className="w-2 h-2 rounded-full bg-current" />
+                  {customer.Intent_to_Visit_Rating || 'LOW'}
+                </span>
+              </div>
+              <div className="rounded-xl bg-[#16161d] border border-white/5 p-4 space-y-3">
+                <p className="text-[11px] uppercase tracking-[0.08em] text-gray-500">Purchase Timeline</p>
+                <span className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold bg-amber-500/10 text-amber-200 border border-amber-500/20">
+                  {customer.Timeline_to_Purchase || 'N/A'}
+                </span>
+              </div>
+              <div className="rounded-xl bg-[#16161d] border border-white/5 p-4 space-y-3">
+                <p className="text-[11px] uppercase tracking-[0.08em] text-gray-500">Customer Stage (AIDA)</p>
+                <div className="flex items-center gap-1">
+                  {getAidaSteps(customer.Customer_Stage_AIDA).map((step, idx) => (
+                    <React.Fragment key={idx}>
+                      <span className={`px-3 py-2 rounded-md text-[11px] font-semibold tracking-wide ${step.active ? 'bg-amber-500 text-[#0b0b10]' : 'bg-[#1f1f29] text-gray-500'}`}>
+                        {step.letter}
+                      </span>
+                      {idx < 3 && <span className="w-3 h-0.5 bg-white/10" />}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-xl bg-[#16161d] border border-white/5 p-4 space-y-3">
+                <p className="text-[11px] uppercase tracking-[0.08em] text-gray-500">Barriers</p>
+                <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-semibold ${customer.Barriers_to_Conversion ? 'bg-orange-500/10 text-orange-300 border border-orange-500/30' : 'bg-white/5 text-gray-300 border border-white/10'}`}>
+                  {customer.Barriers_to_Conversion || 'None identified'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {customer.Primary_Questions_Asked && customer.Primary_Questions_Asked.length > 0 && (
+            <div className="border-t border-white/5 pt-5">
+              <p className="text-[11px] uppercase tracking-[0.08em] text-gray-500 mb-3">Primary Questions Asked</p>
+              <div className="flex flex-wrap gap-3">
+                {customer.Primary_Questions_Asked.map((q, idx) => (
+                  <span key={idx} className="px-4 py-2 rounded-md bg-[#16161d] border-l-4 border-amber-500 text-sm text-gray-100 italic">
+                    "{q}"
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Section 3: Product Demonstration */}
+        <section className="rounded-2xl border border-white/10 bg-[#0f0f14] p-7 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-['Fraunces',serif] font-semibold">Product Demonstration</h2>
+              <p className="text-sm text-gray-500">Visual Demo Quality</p>
+            </div>
+            <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border ${productDemo.Done ? 'bg-green-500/10 border-green-500/40 text-green-300' : 'bg-red-500/10 border-red-500/40 text-red-300'}`}>
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="w-4 h-4">
+                <path d={productDemo.Done ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'} />
+              </svg>
+              {productDemo.Done ? 'Demo Done' : 'Demo Not Done'}
+            </span>
+          </div>
+
+          <div className="flex flex-col xl:flex-row gap-5">
+            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              {[{
+                label: 'Quality', value: productDemo.Quality_Rating
+              }, {
+                label: 'Relevance', value: productDemo.Relevance_Rating
+              }, {
+                label: 'Video/Audio', value: productDemo.Video_Audio_Quality_Rating
+              }, {
+                label: 'Effectiveness', value: productDemo.Effectiveness_Rating
+              }, {
+                label: 'Engagement', value: productDemo.Customer_Engagement_Rating
+              }].map((metric, idx) => {
+                const score = metric.value || 0;
+                const scoreClass = score >= 5 ? 'text-green-400 border-green-500/50' : score === 4 ? 'text-emerald-300 border-emerald-500/40' : score === 3 ? 'text-amber-300 border-amber-500/40' : score === 2 ? 'text-orange-300 border-orange-500/40' : 'text-red-300 border-red-500/40';
+                return (
+                  <div key={idx} className={`rounded-xl bg-[#16161d] border-l-4 ${scoreClass} p-4 text-center`}>
+                    <div className={`text-3xl font-['Fraunces',serif] font-semibold ${scoreClass.split(' ')[0]}`}>
+                      {score}<span className="text-sm text-gray-500">/5</span>
+                    </div>
+                    <p className="text-xs uppercase tracking-[0.08em] text-gray-400 mt-1">{metric.label}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {productDemo.Demo_Observations && productDemo.Demo_Observations.length > 0 && (
+              <div className="min-w-[260px] rounded-xl bg-[#16161d] border border-white/10 p-5">
+                <p className="text-[11px] uppercase tracking-[0.08em] text-gray-500 mb-3">Observations</p>
+                <ul className="space-y-2 text-sm text-gray-300">
+                  {productDemo.Demo_Observations.map((obs, idx) => (
+                    <li key={idx} className="flex gap-2 leading-relaxed">
+                      <span className="text-amber-400 mt-1">•</span>
+                      <span>{obs}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Section 4: RELAX Framework */}
+        <section className="rounded-2xl border border-white/10 bg-[#0f0f14] p-7 space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-['Fraunces',serif] font-semibold">RELAX Framework Performance</h2>
+            <span className="text-sm text-gray-500">Sales Methodology</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {[{
+              key: 'R', label: 'Reach Out', data: relaxFramework.R_Reach_Out
+            }, {
+              key: 'E', label: 'Explore Needs', data: relaxFramework.E_Explore_Needs
+            }, {
+              key: 'L', label: 'Link Demo', data: relaxFramework.L_Link_Demo
+            }, {
+              key: 'A', label: 'Add Value', data: relaxFramework.A_Add_Value
+            }, {
+              key: 'X', label: 'Express Offers', data: relaxFramework.X_Express_Offers
+            }].map((pillar, idx) => {
+              const score = pillar.data?.Rating || 0;
+              const scoreClass = score >= 5 ? 'text-green-400 border-green-500/50' : score === 4 ? 'text-emerald-300 border-emerald-500/40' : score === 3 ? 'text-amber-300 border-amber-500/40' : score === 2 ? 'text-orange-300 border-orange-500/40' : 'text-red-300 border-red-500/40';
+              return (
+                <div key={idx} className={`rounded-xl bg-[#16161d] border-t-4 ${scoreClass} p-5 flex flex-col gap-2`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl font-['Fraunces',serif] font-semibold">{pillar.key}</span>
+                    <span className={`text-2xl font-['Fraunces',serif] font-semibold ${scoreClass.split(' ')[0]}`}>{score}<span className="text-sm text-gray-500">/5</span></span>
+                  </div>
+                  <p className="text-[11px] uppercase tracking-[0.08em] text-gray-500">{pillar.label}</p>
+                  <p className="text-sm text-gray-300 leading-relaxed">
+                    {Array.isArray(pillar.data?.Reasons) ? pillar.data.Reasons.join(' | ') : (pillar.data?.Reasons || 'N/A')}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Section 5: Soft Skills */}
+        <section className="rounded-2xl border border-white/10 bg-[#0f0f14] p-7 space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-['Fraunces',serif] font-semibold">Soft Skills & Etiquette</h2>
+            <span className="text-sm text-gray-500">Communication</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {[{
+              label: 'Active Listening', value: softSkills.Active_Listening_Rating
+            }, {
+              label: 'Empathy & Rapport', value: softSkills.Empathy_Rapport_Rating
+            }, {
+              label: 'Clarity & Confidence', value: softSkills.Clarity_Confidence_Rating
+            }, {
+              label: 'Objection Handling', value: softSkills.Objection_Handling_Rating
+            }, {
+              label: 'Dead Air Mgmt', value: softSkills.Hold_and_Dead_Air_Management_Rating
+            }].map((skill, idx) => {
+              const score = skill.value || 0;
+              const scoreClass = score >= 5 ? 'text-green-400' : score === 4 ? 'text-emerald-300' : score === 3 ? 'text-amber-300' : 'text-red-300';
+              return (
+                <div key={idx} className="rounded-xl bg-[#16161d] border border-white/5 p-5 text-center">
+                  <div className={`text-4xl font-['Fraunces',serif] font-semibold ${scoreClass}`}>
+                    {score}<span className="text-lg text-gray-500">/5</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2 uppercase tracking-[0.08em]">{skill.label}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Section 6: Agent Assessment */}
+        <section className="rounded-2xl border border-white/10 bg-[#0f0f14] p-7 space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-['Fraunces',serif] font-semibold">Agent Assessment</h2>
+            <span className="text-sm text-gray-500">Presentation · Language · Invitation</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Presentability */}
+            <div className="rounded-xl bg-[#16161d] border border-white/5 p-5">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/5">
+                <span className="text-base font-semibold">Agent Presentability</span>
+                <span className={`text-3xl font-['Fraunces',serif] ${getScoreColor(presentability.Score || 0)}`}>
+                  {presentability.Score || 0}<span className="text-sm text-gray-500">/5</span>
+                </span>
+              </div>
+              <p className="text-sm text-gray-300 leading-relaxed mb-3">{presentability.Reason_for_Score || 'N/A'}</p>
+              {Array.isArray(presentability.Checklist) && (
+                <div className="flex flex-wrap gap-2">
+                  {presentability.Checklist.map((item, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 text-green-300 text-xs border border-green-500/30">
+                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="w-4 h-4">
+                        <path d="M5 13l4 4L19 7" />
+                      </svg>
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Language */}
+            <div className="rounded-xl bg-[#16161d] border border-white/5 p-5">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/5">
+                <span className="text-base font-semibold">Agent Language Fluency</span>
+                <span className={`text-3xl font-['Fraunces',serif] ${getScoreColor(languageFluency.Score || 0)}`}>
+                  {languageFluency.Score || 0}<span className="text-sm text-gray-500">/5</span>
+                </span>
+              </div>
+              <p className="text-sm text-gray-300 leading-relaxed mb-3">{languageFluency.Comment || 'No comments available'}</p>
+            </div>
+
+            {/* Invitation */}
+            <div className="rounded-xl bg-[#16161d] border border-white/5 p-5">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/5">
+                <span className="text-base font-semibold">Invitation to Visit</span>
+                <span className={`text-3xl font-['Fraunces',serif] ${getScoreColor(invitation.Quality_Rating || 0)}`}>
+                  {invitation.Quality_Rating || 0}<span className="text-sm text-gray-500">/5</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${invitation.Attempted ? 'bg-green-500/10 text-green-300 border border-green-500/30' : 'bg-red-500/10 text-red-300 border border-red-500/30'}`}>
+                  {invitation.Attempted ? 'Attempted' : 'Not Attempted'}
+                </span>
+                <span className="text-xs text-gray-400">{invitation.Attempted ? 'Store visit pitched' : 'No invitation'}</span>
+              </div>
+              {invitation.Reasons && invitation.Reasons.length > 0 && (
+                <ul className="space-y-2 text-sm text-gray-300">
+                  {invitation.Reasons.map((reason, idx) => (
+                    <li key={idx} className="flex gap-2">
+                      <span className="text-amber-400 mt-1">•</span>
+                      <span>{reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Section 7: Improvement Areas */}
+        {softSkills.Top_3_Improvement_Areas && softSkills.Top_3_Improvement_Areas.length > 0 && (
+          <section className="rounded-2xl border border-white/10 bg-[#0f0f14] p-7 space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-['Fraunces',serif] font-semibold">Top 3 Improvement Areas</h2>
+              <span className="text-sm text-gray-500">Actionable coaching</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {softSkills.Top_3_Improvement_Areas.map((area, idx) => (
+                <div key={idx} className="flex gap-3 rounded-xl bg-[#16161d] border border-white/10 p-4 hover:border-amber-500/40 transition-colors">
+                  <div className="w-9 h-9 flex items-center justify-center rounded-full bg-amber-500/10 border border-amber-500/40 text-amber-300 font-mono text-sm font-semibold">
+                    {idx + 1}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-semibold text-white text-sm">{area.title || area.Area || `Area ${idx + 1}`}</p>
+                    <p className="text-sm text-gray-300 leading-relaxed">{area.description || area.Description || ''}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Section 8: Summary */}
+        <section className="rounded-2xl border border-white/10 bg-[#0f0f14] p-7 space-y-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-['Fraunces',serif] font-semibold">Call Summary</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[{
+              icon: '📋', label: 'Call Synopsis', value: overallSummary.Chronological_Call_Summary
+            }, {
+              icon: '👤', label: 'Agent Performance', value: overallSummary.Agent_Handling_Summary
+            }, {
+              icon: '😊', label: 'Customer Satisfaction', value: overallSummary.Customer_Satisfaction_Summary
+            }, {
+              icon: '➡️', label: 'Next Action', value: overallSummary.Next_Action
+            }].map((summary, idx) => (
+              <div key={idx} className="rounded-xl bg-[#16161d] border border-white/5 p-5 space-y-3">
+                <div className="flex items-center gap-2 text-[12px] uppercase tracking-[0.08em] text-gray-400">
+                  <span>{summary.icon}</span>
+                  <span>{summary.label}</span>
+                </div>
+                {summary.label === 'Next Action' ? (
+                  <span className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-green-500/10 text-green-300 border border-green-500/30 text-sm font-semibold">
+                    <span className="text-lg">📍</span>
+                    {summary.value || 'Follow-up Required'}
+                  </span>
+                ) : (
+                  <p className="text-sm text-gray-200 leading-relaxed">{summary.value || 'No details available'}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Section 9: Transcript */}
+        {transcript && transcript.messages && transcript.messages.length > 0 && (
+          <section className="rounded-2xl border border-white/10 bg-[#0f0f14] overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+              <h2 className="text-xl font-['Fraunces',serif] font-semibold">Call Transcript</h2>
+              <button
+                onClick={() => setTranscriptExpanded(!transcriptExpanded)}
+                className="flex items-center gap-2 text-amber-400 hover:text-amber-300 text-sm px-3 py-2 rounded-md hover:bg-amber-500/10"
+              >
+                <ChevronDown className={`w-5 h-5 transition-transform ${transcriptExpanded ? 'rotate-180' : ''}`} />
+                <span>{transcriptExpanded ? 'Collapse' : 'Expand'}</span>
+              </button>
+            </div>
+            {transcriptExpanded && (
+              <div className="px-6 py-5 max-h-[420px] overflow-y-auto space-y-3">
+                {transcript.messages.map((message, idx) => (
+                  <div key={idx} className="flex gap-3 rounded-lg bg-[#16161d] border border-white/5 p-3">
+                    <span className="text-[11px] font-mono text-gray-400 min-w-[48px] pt-1">{message.time || '00:00'}</span>
+                    <div className="flex-1 space-y-1">
+                      <div className={`text-[11px] uppercase tracking-[0.08em] font-semibold ${message.speaker?.toLowerCase().includes('agent') ? 'text-amber-300' : 'text-green-300'}`}>
+                        {message.speaker_name || message.speaker || 'Unknown'}
+                      </div>
+                      <p className="text-sm text-gray-200 leading-relaxed">{message.text || ''}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default VideoCallDetail;
